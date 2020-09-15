@@ -1,58 +1,70 @@
-# Multi-Touch-Attribution_ShapleyValue
-Using the sample marketing dataset from [Kaggle](https://www.kaggle.com/kavitabhagwani/marketing-campaign), we will be extracting four variables from the dataset: *'user_id', 'date_served', 'marketing_channel', 'converted'*. Some pre-processing work is done to drop rows which contain null values, as well as relabel *'converted'* into binary. 
+#########################################################
+### MULTI-TOUCH ATTRIBUTION MODEL USING SHAPLEY VALUE ###
+#########################################################
+# %%
+### import packages
+import itertools
+from pathlib import Path
+from collections import defaultdict
+from itertools import combinations, permutations
 
-```python
+import numpy as np 
+import pandas as pd 
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# %%
+### reading in dataset
+data_path = './dataset/datasets_marketing.csv'
+data_path_resolve = Path(data_path).resolve()
+data_raw = pd.read_csv(data_path_resolve)
+
+# %%
 ###  extracting the needed field
 columns = ['user_id', 'date_served', 'marketing_channel', 'converted']
 data = data_raw[columns].copy()
+print(f"Data dimension: {data.shape}")
 
 ### dropping null values
 data.dropna(axis=0, inplace=True)
+print(f"Data dimension after dropping null values: {data.shape}")
 
 ### relabel conversion to 1/0
 data['converted'] = data['converted'].astype('int') 
 ### converting date_served into date format
 data['date_served'] = pd.to_datetime(data['date_served'], format='%m/%d/%y', errors='coerce')
-```
 
-In the first step of the calculation, we will compute for each channel subset, the sum of conversions generated. 
-
-```python
+# %%
 ### create a channel mix conversion table 
 # first level - sort
 data_lvl1 = data[['user_id', 'marketing_channel', 'converted']].sort_values(by=['user_id', 'marketing_channel'])
-
 # second level - groupby userid, concat distinct marketing channel and label if any conversion took place with this channel mix
-data_lvl2 = data_lvl1.groupby(['user_id'], as_index=False).agg({'marketing_channel': lambda x: ','.join(map(str,x.unique())),'converted':max})
+data_lvl2 = data_lvl1.groupby(['user_id'], as_index=False).agg({'marketing_channel': lambda x: ','.join(map(str,x.unique())),
+                                                                'converted':max})
 data_lvl2.rename(columns={'marketing_channel':'marketing_channel_subset'}, inplace=True)
-
 # third level - summing up the conversion which took place for each channel mix
 data_lvl3 = data_lvl2.groupby(['marketing_channel_subset'], as_index=False).agg(sum)
-```
 
-Once we have prepared the dataset, we will then proceed with the set up of calculating Shapley value.
 
-```python
+# %%
 #### setting up the formulas for shapley value
-###############################################################################################
+#######################################################################################################################
 
-### return all possible combination of the channel
 def power_set(List):
     PS = [list(j) for i in range(len(List)) for j in itertools.combinations(List, i+1)]
     return PS
   
-###############################################################################################
+#######################################################################################################################
 
-### calculating the factorial of a number
 def factorial(n):
     if n == 0:
         return 1
     else:
         return n * factorial(n-1)
-       
-###############################################################################################
+    
+    
+#######################################################################################################################
 
-### compute the worth of each coalition
 def v_function(A,C_values):
     '''
     This function computes the worth of each coalition.
@@ -67,9 +79,8 @@ def v_function(A,C_values):
             worth_of_A += C_values[subset]
     return worth_of_A
       
-###############################################################################################
+#######################################################################################################################
 
-### return all possible subsets from the channels
 def subsets(s):
     '''
     This function returns all the possible subsets of a set of channels.
@@ -84,7 +95,7 @@ def subsets(s):
             sub_channels.extend(map(list,itertools.combinations(s, i)))
     return list(map(",".join,map(sorted,sub_channels)))
   
-###############################################################################################
+#######################################################################################################################
 
 def calculate_shapley(df, channel_name, conv_name):
     '''
@@ -122,5 +133,27 @@ def calculate_shapley(df, channel_name, conv_name):
         shapley_values[channel]+= v_values[channel]/n 
         
     return shapley_values
-```
 
+
+# %%
+### calculating the shapley value of the channel
+shapley_dict = calculate_shapley(data_lvl3, 'marketing_channel_subset', 'converted')
+shapley_result = pd.DataFrame(list(shapley_dict.items()), columns=['channel', 'shapley_value'])
+
+
+# %%
+### visualizing the results
+# sns.set_style("white")
+plt.subplots(figsize=(15,8))
+s = sns.barplot(x='channel', y='shapley_value', data=shapley_result)
+
+for idx, row in shapley_result.iterrows():
+    s.text(row.name, row.shapley_value +5, round(row.shapley_value,1), ha='center', color='darkslategray', fontweight='semibold')
+plt.title("ADVERTISING CHANNEL'S SHAPLEY VALUE", 
+          fontdict={'fontfamily': 'san-serif', 'fontsize': 15, 'fontweight': 'semibold', 'color':'#444444'}, 
+          loc='center', pad=10)
+plt.show()
+
+
+
+# %%
