@@ -110,8 +110,7 @@ def calculate_shapley(df, channel_name, conv_name):
     '''
     # casting the subset into dict, and getting the unique channels
     c_values = df.set_index(channel_name).to_dict()[conv_name]
-    df['channels'] = df[channel_name].apply(lambda x: x if len(x.split(",")) == 1 else np.nan)
-    channels = list(df['channels'].dropna().unique())
+    channels = df[channel_name].apply(lambda x: x.split(",")).explode().unique()
     
     v_values = {}
     for A in power_set(channels): #generate all possible channel combination
